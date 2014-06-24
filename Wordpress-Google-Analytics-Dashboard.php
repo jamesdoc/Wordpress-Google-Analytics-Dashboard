@@ -13,7 +13,8 @@
 	class WpgaDash{
 		
 		// Name of the main var we are going to store in the options table
-		protected $option_name = 'wpga_settings';
+		protected $option_store = 'wpga_settings';
+		protected $token_store = 'wpga_token';
 		
 		// Declare some default settings
 		protected $default_settings = array(
@@ -40,12 +41,30 @@
 			add_action( 'admin_init', array( &$this, 'wpga_admin_init' ) );
 			add_action( 'admin_menu', array( &$this, 'wpga_create_options_page' ) );
 			
+			// Authenticate
+			add_action( 'admin_init', array( &$this, 'authenticate' ) );
 		}
 		
 		
 		// Whitelist settings that will be created
 		public function wpga_admin_init() {
-			register_setting( 'wpga_settings', $this->option_name, array($this, 'wpga_validate') );
+			register_setting( 'wpga_settings', $this->option_store, array($this, 'wpga_validate') );
+		}
+		
+		
+		public function authenticate() {
+			if($_GET['auth'] == True){
+				include_once('wpga_auth.php');
+			}
+			
+			if($_GET['forget'] == True){
+				update_option($this->token_store, '');
+				header('Location: ' . admin_url('options-general.php?page=wpga_settings'));
+			}
+			
+			if($_GET['refresh'] == True){
+				include_once('wpga_refresh_token.php');
+			}
 		}
 		
 		
@@ -64,7 +83,8 @@
 		// Output options form
 		public function wpga_top_posts_options_form() {
 			
-			$options = get_option($this->option_name);
+			$options = get_option($this->option_store);
+			$token = get_option($this->token_store);
 			?>
 			<div class="wrap">
 			
@@ -82,22 +102,22 @@
 						<table class="form-table">
 							<tr valign="top">
 								<th scope="row">Client ID:</th>
-								<td><input type="text" name="<?php echo $this->option_name?>[ga_api][google_client_id]" value="<?php echo $options['ga_api']['google_client_id']; ?>" /></td>
+								<td><input type="text" name="<?php echo $this->option_store?>[ga_api][google_client_id]" value="<?php echo $options['ga_api']['google_client_id']; ?>" /></td>
 							</tr>
 							
 							<tr valign="top">
 								<th scope="row">Client Secret ID:</th>
-								<td><input type="text" name="<?php echo $this->option_name?>[ga_api][google_client_secret]" value="<?php echo $options['ga_api']['google_client_secret']; ?>" /></td>
+								<td><input type="text" name="<?php echo $this->option_store?>[ga_api][google_client_secret]" value="<?php echo $options['ga_api']['google_client_secret']; ?>" /></td>
 							</tr>
 							
 							<tr valign="top">
 								<th scope="row">Client Redirect URL:</th>
-								<td><input type="text" name="<?php echo $this->option_name?>[ga_api][google_redirect_url]" value="<?php echo $options['ga_api']['google_redirect_url']; ?>" /></td>
+								<td><input type="text" name="<?php echo $this->option_store?>[ga_api][google_redirect_url]" value="<?php echo $options['ga_api']['google_redirect_url']; ?>" /></td>
 							</tr>
 							
 							<tr valign="top">
 								<th scope="row">Client URL Prefix:</th>
-								<td><input type="text" name="<?php echo $this->option_name?>[ga_api][google_page_url_prefix]" value="<?php echo $options['ga_api']['google_page_url_prefix']; ?>" /></td>
+								<td><input type="text" name="<?php echo $this->option_store?>[ga_api][google_page_url_prefix]" value="<?php echo $options['ga_api']['google_page_url_prefix']; ?>" /></td>
 							</tr>
 						</table>
 						<p>
@@ -112,22 +132,31 @@
 					<? endif; ?>
 					
 					
+					
 					<h3>Authenticate with Google</h3>
 					<table class="form-table">
 		                <tr valign="top">
+		                	<?php if( $token == null): ?>
 		                	<th scope="row">Grant access:</th>
-		                    <td><a href="" class="button">Authorise access to Google Analytics data</a></td>
+		                    <td><a href="<?php echo admin_url('options-general.php?page=wpga_settings&auth=true')?>" class="button">Authorise access to Google Analytics data</a></td>
+		                    <?php else: ?>
+		                    <th scope="row">Forget access:</th>
+		                    <td><a href="<?php echo admin_url('options-general.php?page=wpga_settings&forget=true')?>" class="button">Forget Google Analytics token</a></td>
+		                    <?php endif; ?>
 		                </tr>
 		            </table>
 					
+					<?php if( $token != null): ?>
 					
 					<h3>Analytics Profile</h3>
 					<table class="form-table">
 		                <tr valign="top">
 		                	<th scope="row">Analytics profile ID:</th>
-		                    <td><input type="text" name="<?php echo $this->option_name?>[ga_profile_id]" value="<?php echo $options['ga_profile_id']; ?>" /></td>
+		                    <td><input type="text" name="<?php echo $this->option_store?>[ga_profile_id]" value="<?php echo $options['ga_profile_id']; ?>" /></td>
 		                </tr>
 		            </table>
+		            
+		            <? endif; ?>
 		            
 		            <p class="submit">
 		                <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
@@ -174,13 +203,15 @@
 		
 		// On activation create some default settings
 		public function wpga_activate() {
-			update_option($this->option_name, $this->default_settings);
+			update_option($this->option_store, $this->default_settings);
+			update_option($this->token_store, '');
 		}
 		
 		
 		// On deactivation clear up in the database
 		public function wpga_deactivate() {
-		    delete_option($this->option_name);
+		    delete_option($this->option_store);
+		    delete_option($this->token_store);
 		}
 		
 	}
