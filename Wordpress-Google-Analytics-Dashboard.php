@@ -15,6 +15,7 @@
 		// Name of the main var we are going to store in the options table
 		protected $option_store = 'wpga_settings';
 		protected $token_store = 'wpga_token';
+		protected $profile_store = 'wpga_profile';
 		
 		// Declare some default settings
 		protected $default_settings = array(
@@ -59,6 +60,7 @@
 			
 			if($_GET['forget'] == True){
 				update_option($this->token_store, '');
+				update_option($this->profile_store, '');
 				header('Location: ' . admin_url('options-general.php?page=wpga_settings'));
 			}
 			
@@ -85,6 +87,7 @@
 			
 			$options = get_option($this->option_store);
 			$token = get_option($this->token_store);
+			$profiles = get_option($this->profile_store);
 			?>
 			<div class="wrap">
 			
@@ -141,18 +144,33 @@
 		                    <td><a href="<?php echo admin_url('options-general.php?page=wpga_settings&auth=true')?>" class="button">Authorise access to Google Analytics data</a></td>
 		                    <?php else: ?>
 		                    <th scope="row">Forget access:</th>
-		                    <td><a href="<?php echo admin_url('options-general.php?page=wpga_settings&forget=true')?>" class="button">Forget Google Analytics token</a></td>
+		                    <td><a href="<?php echo admin_url('options-general.php?page=wpga_settings&forget=true')?>" class="button">Logout of Google Analytics</a></td>
 		                    <?php endif; ?>
 		                </tr>
 		            </table>
 					
-					<?php if( $token != null): ?>
+					<?php if ($token != null): ?>
+					
+					<?php
+						if (!$profiles) {
+							// Go get a list of profiles that the user can access
+							$this->get_profile_information($token);
+							
+							$profiles = get_option($this->profile_store);
+						}
+					?>
 					
 					<h3>Analytics Profile</h3>
 					<table class="form-table">
 		                <tr valign="top">
 		                	<th scope="row">Analytics profile ID:</th>
-		                    <td><input type="text" name="<?php echo $this->option_store?>[ga_profile_id]" value="<?php echo $options['ga_profile_id']; ?>" /></td>
+		                    <td>		                    	
+		                    	<select name="<?php echo $this->option_store?>[ga_profile_id]">
+		                    		<?php foreach($profiles as $profile): ?>
+		                    			<option value="<?php echo $profile['id']; ?>" <?php if($options['ga_profile_id'] == $profile['id']){ echo ' selected="selected"';} ?>><?php echo $profile['name']; ?></option>
+		                    		<?php endforeach; ?>
+		                    	</select>
+		                    </td>
 		                </tr>
 		            </table>
 		            
@@ -205,6 +223,7 @@
 		public function wpga_activate() {
 			update_option($this->option_store, $this->default_settings);
 			update_option($this->token_store, '');
+			update_option($this->profile_store, '');
 		}
 		
 		
@@ -212,6 +231,68 @@
 		public function wpga_deactivate() {
 		    delete_option($this->option_store);
 		    delete_option($this->token_store);
+		    delete_option($this->profile_store);
+		}
+
+		
+		// Add a list of all the profiles that user has access to 
+		public function get_profile_information($token){
+			
+			include_once("wpga_setup.php");
+			
+			// We're going to dump all the profile information into an array and then put them into the options table
+			$profile_store = array();
+			
+			$gClient->setAccessToken($token);
+					
+			// Create analytics services object
+			$analytics_service = new Google_AnalyticsService($gClient);
+			
+			// Get a list of top level accounts
+			$accounts = $analytics_service->management_accounts->listManagementAccounts();
+			
+			foreach ($accounts->getItems() as $account){
+			
+				$account_id = $account->getId();
+				$account_name = $account->name;
+				
+				// Get a list of all the properties in each account
+				$properties = $analytics_service->management_webproperties->listManagementWebproperties($account_id);
+				
+				foreach ($properties->getItems() as $property) {
+					
+					$property_id = $property->getId();
+					$property_name = $property->name;
+					$property_url = $property->websiteUrl;
+					
+					// Get the specific profile information for each property
+					$profiles = $analytics_service->management_profiles->listManagementProfiles($account_id, $property_id);
+					
+					if (count($profiles->getItems()) > 0) {
+						
+						// We only care about the first profile
+		                $items = $profiles->getItems();
+		                $profileId = $items[0]->getId();
+						
+						$name = $account_name;
+						
+						if ($account_name != $property_name) {
+							$name .= ' - ' . $property_name;
+						}
+						
+						$profile_store[] = array(
+							'id' 	=> 'ga:' . $profileId,
+							'name'	=> $name,
+							'url'	=> $property_url
+						);
+	                }
+					
+				} // End foreach property
+				
+			} // End foreach account
+			
+			// Store updates in the database
+			update_option($this->profile_store, $profile_store); 
 		}
 		
 	}

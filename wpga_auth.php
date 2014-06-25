@@ -10,9 +10,12 @@
 	// Has Google sent a auth code via the query string?
 	if (isset($_GET['code'])) {
 	
+		// Authenticate and add token to db
 		$gClient->authenticate();
 		$token = $gClient->getAccessToken();
 		update_option($this->token_store, $token);
+				
+		// All done? Redirect
 		header('Location: ' . admin_url('options-general.php?page=wpga_settings'));
 	
 	// Nothing from Google, lets go log in...
