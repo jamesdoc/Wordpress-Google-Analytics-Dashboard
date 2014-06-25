@@ -16,6 +16,7 @@
 		protected $option_store = 'wpga_settings';
 		protected $token_store = 'wpga_token';
 		protected $profile_store = 'wpga_profile';
+		protected $top_post_store = 'wpga_posts';
 		
 		// Declare some default settings
 		protected $default_settings = array(
@@ -44,6 +45,9 @@
 			
 			// Authenticate
 			add_action( 'admin_init', array( &$this, 'authenticate' ) );
+			
+			// Set up cronjob
+			add_action( 'prefix_hourly_event_hook', 'wpga_get_top_posts' );
 		}
 		
 		
@@ -154,7 +158,7 @@
 					<?php
 						if (!$profiles) {
 							// Go get a list of profiles that the user can access
-							$this->get_profile_information($token);
+							$this->get_profile_information();
 							
 							$profiles = get_option($this->profile_store);
 						}
@@ -221,22 +225,75 @@
 		
 		// On activation create some default settings
 		public function wpga_activate() {
+			
+			// Create some empty options
 			update_option($this->option_store, $this->default_settings);
 			update_option($this->token_store, '');
 			update_option($this->profile_store, '');
+			update_option($this->top_post_store, '');
+			
+			// Set up pseudo-cron
+			wp_schedule_event( time(), 'hourly', 'prefix_hourly_event_hook' );
 		}
 		
 		
 		// On deactivation clear up in the database
 		public function wpga_deactivate() {
+		    
+		    // Delete all database options
 		    delete_option($this->option_store);
 		    delete_option($this->token_store);
 		    delete_option($this->profile_store);
+		    delete_options($this->top_post_store);
+		    
+		    // Deregister pseudo cron
+		    wp_clear_scheduled_hook( 'prefix_hourly_event_hook' );
+		}
+		
+		
+		public function wpga_get_top_posts(){
+			
+			$options = get_option($this->option_store);
+			$token = get_option($this->token_store);
+		
+			include_once("wpga_setup.php");
+						
+			$gClient->setAccessToken($token);
+						
+			//create analytics services object
+			$analytics_service = new Google_AnalyticsService($gClient); 
+			
+			// These should be filtered out into options
+			$google_analytics_dimensions 	= 'ga:pagePath,ga:pageTitle'; //no change needed (optional)
+			$google_analytics_metrics 		= 'ga:pageviews'; //no change needed (optional)
+			$google_analytics_sort_by 		= '-ga:pageviews'; //no change needed (optional)
+			$google_analytics_max_results 	= '100'; //no change needed (optional)
+			
+			$start_date = date( "Y-m-d", strtotime("-30 day") ); 
+			$end_date = date( "Y-m-d", strtotime("-1 day") );
+			
+			$filter = 'ga:pagePath=~/blog/.*/.*;ga:pagePath!@section;ga:pagePath!@author;ga:pagePath!@tag;ga:pagePath!@page;ga:pagePath!~/blog/[0-9]/*';
+			
+			//analytics parameters (check configuration file)
+			$params = array(
+			    'dimensions' => $google_analytics_dimensions,
+			    'sort' => $google_analytics_sort_by,
+			    'filters' => $filter,
+			    'max-results' => $google_analytics_max_results
+			);
+			
+			//get results from google analytics
+			$top_posts = $analytics_service->data_ga->get($options['ga_profile_id'], $start_date, $end_date, $google_analytics_metrics, $params);
+			
+			// Add top posts to the options database			
+			update_option($this->top_post_store, $top_posts->rows); 
 		}
 
 		
 		// Add a list of all the profiles that user has access to 
-		public function get_profile_information($token){
+		public function get_profile_information(){
+			
+			$token = get_option($this->token_store);
 			
 			include_once("wpga_setup.php");
 			
