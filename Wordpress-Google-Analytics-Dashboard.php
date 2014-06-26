@@ -9,6 +9,8 @@
 	*/
 	
 	$load = new WpgaDash();
+	include_once('wpga_dashboard_wdgt.php');
+	
 	
 	class WpgaDash{
 		
@@ -26,9 +28,14 @@
 					'google_redirect_url' 	=> 'http://...',
 					'google_page_url_prefix'=> 'http://...'
 				),
-			'ga_profile_id' => 'ga:######'
+			'ga_profile_id' => 'ga:######',
+			'ga_filter' 	=> 'ga:pagePath=~/blog/.*/.*',
+			'ga_dimension'	=> 'ga:pagePath,ga:pageTitle',
+			'ga_metrics'	=> 'ga:pageviews',
+			'ga_sort_by'	=> '-ga:pageviews',
+			'ga_max_results'=> '50'
 		);
-		
+	
 		
 		public function __construct(){
 			
@@ -47,7 +54,7 @@
 			add_action( 'admin_init', array( &$this, 'authenticate' ) );
 			
 			// Set up cronjob
-			add_action( 'prefix_hourly_event_hook', 'wpga_get_top_posts' );
+			add_action( 'prefix_hourly_event_hook', array( &$this, 'wpga_get_top_posts') );
 		}
 		
 		
@@ -57,6 +64,7 @@
 		}
 		
 		
+		// Deal with all the authentication goodness that comes from Google
 		public function authenticate() {
 			if($_GET['auth'] == True){
 				include_once('wpga_auth.php');
@@ -92,6 +100,13 @@
 			$options = get_option($this->option_store);
 			$token = get_option($this->token_store);
 			$profiles = get_option($this->profile_store);
+			$top_posts = get_option($this->top_post_store);
+			
+			// If profile in database doesn't match saved options then go and get new data
+			if($options['ga_profile_id'] != $top_posts['profile']) {
+				$this->wpga_get_top_posts();
+			}
+			
 			?>
 			<div class="wrap">
 			
@@ -176,6 +191,32 @@
 		                    	</select>
 		                    </td>
 		                </tr>
+		                
+		                <tr valign="top">
+		                	<th scope="row">Analytics filter:</th>	                    	
+							<td><input type="text" name="<?php echo $this->option_store?>[ga_filter]" value="<?php echo $options['ga_filter']; ?>" /></td>
+		                </tr>
+		                
+		                <tr valign="top">
+		                	<th scope="row">Analytics dimension:</th>	                    	
+							<td><input type="text" name="<?php echo $this->option_store?>[ga_dimension]" value="<?php echo $options['ga_dimension']; ?>" /></td>
+		                </tr>
+		                
+		                <tr valign="top">
+		                	<th scope="row">Analytics metric:</th>	                    	
+							<td><input type="text" name="<?php echo $this->option_store?>[ga_metrics]" value="<?php echo $options['ga_metrics']; ?>" /></td>
+		                </tr>
+		                
+		                <tr valign="top">
+		                	<th scope="row">Analytics sort by:</th>	                    	
+							<td><input type="text" name="<?php echo $this->option_store?>[ga_sort_by]" value="<?php echo $options['ga_sort_by']; ?>" /></td>
+		                </tr>
+		                
+		                <tr valign="top">
+		                	<th scope="row">Analytics max results:</th>	                    	
+							<td><input type="text" name="<?php echo $this->option_store?>[ga_max_results]" value="<?php echo $options['ga_max_results']; ?>" /></td>
+		                </tr>
+		                
 		            </table>
 		            
 		            <? endif; ?>
@@ -203,14 +244,18 @@
 			$valid['ga_api']['google_page_url_prefix'] 	= sanitize_text_field($input['ga_api']['google_page_url_prefix']);
 			
 			$valid['ga_profile_id'] 					= sanitize_text_field($input['ga_profile_id']);
-			
+			$valid['ga_filter'] 						= sanitize_text_field($input['ga_filter']);
+			$valid['ga_dimension'] 						= sanitize_text_field($input['ga_dimension']);
+			$valid['ga_metrics'] 						= sanitize_text_field($input['ga_metrics']);
+			$valid['ga_sort_by'] 						= sanitize_text_field($input['ga_sort_by']);
+			$valid['ga_max_results'] 					= sanitize_text_field($input['ga_max_results']);
 			
 			// User hasn't entered a GA Profile ID: Throw error and reset field to default
 			if (strlen($valid['ga_profile_id']) == 0) {
 		        add_settings_error(
 		                'ga_profile_id',                // Setting title
 		                'ga_profile_id_error',          // Error ID
-		                'Please select a profile ID',   // Error message
+		                'Profile ID cannot be left empty',   // Error message
 		                'error'                         // Type of message
 		        );
 		
@@ -218,6 +263,25 @@
 		        $valid['ga_profile_id'] = $this->default_settings['ga_profile_id'];
 		    }
 		    
+		    if (strlen($valid['ga_filter']) == 0) {
+		    	add_settings_error('ga_filter', 'ga_filter_error', 'Filter cannot be left empty', 'error');
+		        $valid['ga_filter'] = $this->default_settings['ga_filter'];
+		    }
+		    
+		    if (strlen($valid['ga_dimension']) == 0) {
+		    	add_settings_error('ga_dimension', 'ga_dimension_error', 'Dimension cannot be left empty', 'error');
+		        $valid['ga_dimension'] = $this->default_settings['ga_dimension'];
+		    }
+		    
+		    if (strlen($valid['ga_sort_by']) == 0) {
+		    	add_settings_error('ga_sort_by', 'ga_sort_by_error', 'Sort by cannot be left empty', 'error');
+		        $valid['ga_sort_by'] = $this->default_settings['ga_sort_by'];
+		    }
+		    
+		    if (strlen($valid['ga_max_results']) == 0 || $valid['ga_max_results'] > 100) {
+		    	add_settings_error('ga_max_results', 'ga_max_results_error', 'Max result cannot be left empty and less than 100', 'error');
+		        $valid['ga_max_results'] = $this->default_settings['ga_max_results'];
+		    }
 		    
 		    return $valid;
 		}
@@ -244,17 +308,21 @@
 		    delete_option($this->option_store);
 		    delete_option($this->token_store);
 		    delete_option($this->profile_store);
-		    delete_options($this->top_post_store);
+		    delete_option($this->top_post_store);
 		    
 		    // Deregister pseudo cron
 		    wp_clear_scheduled_hook( 'prefix_hourly_event_hook' );
-		}
+		}		
 		
-		
+		// Go to GA and add top posts to the database
 		public function wpga_get_top_posts(){
 			
 			$options = get_option($this->option_store);
 			$token = get_option($this->token_store);
+			
+			if (!$token || $options['ga_profile_id'] == 'ga:######') {
+				return;
+			}
 		
 			include_once("wpga_setup.php");
 						
@@ -263,30 +331,29 @@
 			//create analytics services object
 			$analytics_service = new Google_AnalyticsService($gClient); 
 			
-			// These should be filtered out into options
-			$google_analytics_dimensions 	= 'ga:pagePath,ga:pageTitle'; //no change needed (optional)
-			$google_analytics_metrics 		= 'ga:pageviews'; //no change needed (optional)
-			$google_analytics_sort_by 		= '-ga:pageviews'; //no change needed (optional)
-			$google_analytics_max_results 	= '100'; //no change needed (optional)
-			
 			$start_date = date( "Y-m-d", strtotime("-30 day") ); 
 			$end_date = date( "Y-m-d", strtotime("-1 day") );
-			
-			$filter = 'ga:pagePath=~/blog/.*/.*;ga:pagePath!@section;ga:pagePath!@author;ga:pagePath!@tag;ga:pagePath!@page;ga:pagePath!~/blog/[0-9]/*';
+
 			
 			//analytics parameters (check configuration file)
 			$params = array(
-			    'dimensions' => $google_analytics_dimensions,
-			    'sort' => $google_analytics_sort_by,
-			    'filters' => $filter,
-			    'max-results' => $google_analytics_max_results
+			    'dimensions' => $options['ga_dimension'],
+			    'sort' => $options['ga_sort_by'],
+			    'filters' => $options['ga_filter'],
+			    'max-results' => $options['ga_max_results']
 			);
 			
 			//get results from google analytics
-			$top_posts = $analytics_service->data_ga->get($options['ga_profile_id'], $start_date, $end_date, $google_analytics_metrics, $params);
+			$top_posts = $analytics_service->data_ga->get($options['ga_profile_id'], $start_date, $end_date, $options['ga_metrics'], $params);
+			
+			$insert = array(
+				'datetime' => date('U'),
+				'profile' => $options['ga_profile_id'],
+				'rows' => $top_posts->rows
+			);
 			
 			// Add top posts to the options database			
-			update_option($this->top_post_store, $top_posts->rows); 
+			update_option($this->top_post_store, $insert); 
 		}
 
 		
