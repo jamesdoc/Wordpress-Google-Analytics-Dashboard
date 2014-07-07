@@ -14,11 +14,14 @@
 		
 		
 		public function wpga_add_dashboard_widget() {
-
-			wp_add_dashboard_widget(
+			
+			add_meta_box(
 				'wdgt_section_stats',
 				'Top posts in the last 30 days...',
-				array($this, 'wpga_dashboard_wdgt')
+				array($this, 'wpga_dashboard_wdgt'),
+				'dashboard',
+				'side',
+				'high' 
 			);
 			
 		}
