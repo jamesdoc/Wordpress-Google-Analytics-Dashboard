@@ -332,7 +332,7 @@
 			$analytics_service = new Google_AnalyticsService($gClient); 
 			
 			$start_date = date( "Y-m-d", strtotime("-30 day") ); 
-			$end_date = date( "Y-m-d", strtotime("-1 day") );
+			$end_date = date( "Y-m-d" );
 
 			
 			//analytics parameters (check configuration file)
