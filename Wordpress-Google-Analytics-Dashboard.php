@@ -372,16 +372,26 @@
 			// Create analytics services object
 			$analytics_service = new Google_AnalyticsService($gClient);
 			
-			// Get a list of top level accounts
-			$accounts = $analytics_service->management_accounts->listManagementAccounts();
+			try {
+				// Get a list of top level accounts
+				$accounts = $analytics_service->management_accounts->listManagementAccounts();
+			} catch (Exception $e) {
+				sleep(1);
+				$accounts = $analytics_service->management_accounts->listManagementAccounts();
+			}
 			
 			foreach ($accounts->getItems() as $account){
 			
 				$account_id = $account->getId();
 				$account_name = $account->name;
 				
-				// Get a list of all the properties in each account
-				$properties = $analytics_service->management_webproperties->listManagementWebproperties($account_id);
+				try {
+					// Get a list of all the properties in each account
+					$properties = $analytics_service->management_webproperties->listManagementWebproperties($account_id);
+				} catch (Exception $e) {
+					sleep(1);
+					$properties = $analytics_service->management_webproperties->listManagementWebproperties($account_id);
+				}
 				
 				foreach ($properties->getItems() as $property) {
 					
@@ -389,9 +399,14 @@
 					$property_name = $property->name;
 					$property_url = $property->websiteUrl;
 					
-					// Get the specific profile information for each property
-					$profiles = $analytics_service->management_profiles->listManagementProfiles($account_id, $property_id);
-					
+					try {
+						// Get the specific profile information for each property
+						$profiles = $analytics_service->management_profiles->listManagementProfiles($account_id, $property_id);
+					} catch (Exception $e) {
+						sleep(1);
+						$profiles = $analytics_service->management_profiles->listManagementProfiles($account_id, $property_id);
+					}
+			
 					if (count($profiles->getItems()) > 0) {
 						
 						// We only care about the first profile
