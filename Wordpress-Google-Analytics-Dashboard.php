@@ -5,7 +5,7 @@
 	Description: (Provided by Google Analytics)
 	Author: James Doc
 	Author URI: http://jamesdoc.com
-	Version: 0.1
+	Version: 0.2
 	*/
 	
 	$load = new WpgaDash();
@@ -33,7 +33,8 @@
 			'ga_dimension'	=> 'ga:pagePath,ga:pageTitle',
 			'ga_metrics'	=> 'ga:pageviews',
 			'ga_sort_by'	=> '-ga:pageviews',
-			'ga_max_results'=> '50'
+			'ga_max_results'=> '50',
+			'ga_root_url'	=> ''
 		);
 	
 		
@@ -217,10 +218,18 @@
 							<td><input type="text" name="<?php echo $this->option_store?>[ga_max_results]" value="<?php echo $options['ga_max_results']; ?>" /></td>
 		                </tr>
 		                
+		                <tr valign="top">
+		                	<th scope="row">Root URL:</th>	                    	
+							<td>
+								<input type="text" name="<?php echo $this->option_store?>[ga_root_url]" value="<?php echo $options['ga_root_url']; ?>" />
+								<p class="description">If your blog is in a subfolder (eg: http://domain.com/blog), you will need to set this to just the root url (eg http://domain.com).</p>
+							</td>
+		                </tr>
+		                
 		            </table>
 		            
-		            <? endif; ?>
-		            
+		            <?php endif; ?>
+					
 		            <p class="submit">
 		                <input type="submit" class="button-primary" value="<?php _e('Save Changes') ?>" />
 		            </p>
@@ -249,6 +258,7 @@
 			$valid['ga_metrics'] 						= sanitize_text_field($input['ga_metrics']);
 			$valid['ga_sort_by'] 						= sanitize_text_field($input['ga_sort_by']);
 			$valid['ga_max_results'] 					= sanitize_text_field($input['ga_max_results']);
+			$valid['ga_root_url'] 						= sanitize_text_field($input['ga_root_url']);
 			
 			// User hasn't entered a GA Profile ID: Throw error and reset field to default
 			if (strlen($valid['ga_profile_id']) == 0) {
@@ -281,6 +291,16 @@
 		    if (strlen($valid['ga_max_results']) == 0 || $valid['ga_max_results'] > 100) {
 		    	add_settings_error('ga_max_results', 'ga_max_results_error', 'Max result cannot be left empty and less than 100', 'error');
 		        $valid['ga_max_results'] = $this->default_settings['ga_max_results'];
+		    }
+		    
+		    if (strlen($valid['ga_root_url']) == 0 || !filter_var($valid['ga_root_url'], FILTER_VALIDATE_URL)) {
+		    	add_settings_error('ga_root_url', 'ga_root_url_error', 'Root URL must be a valid URL', 'error');
+		        $valid['ga_root_url'] = get_site_url();
+		    }
+		    
+		    // If profile id set then refresh the stats in case of change
+		    if ($valid['ga_profile_id'] != "") {
+		    	$this->wpga_get_top_posts();
 		    }
 		    
 		    return $valid;

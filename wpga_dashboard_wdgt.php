@@ -27,14 +27,16 @@
 		}
 		
 		public function wpga_dashboard_wdgt(){
+			$settings = get_option('wpga_settings');
 			$posts = get_option('wpga_posts');
 			$posts = array_slice($posts['rows'], 0, 10);
 			?>
+			
 			<ul>
 			
 			<?php foreach($posts as $post): ?>
 				<li>
-					<a href="<?php echo site_url($post[0]);?>" target="_blank">
+					<a href="<?php echo $settings['ga_root_url'] . $post[0];?>" target="_blank">
 						<?php echo str_replace(' | ' . get_bloginfo('name'), '', $post[1]); ?>
 					</a><br />
 					<small><?php echo $post[2]; ?> page views</small>
